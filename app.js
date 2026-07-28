@@ -2,11 +2,14 @@
 
 import * as db from './lib/db.js';
 import * as vienti from './lib/vienti.js';
+import * as tuonti from './lib/tuonti.js';
 import * as ai from './lib/ai.js';
 import { skaalaa, muotoileKoko } from './lib/kuva.js';
+import { liitaSanelu, saneluTuettu } from './lib/sanelu.js';
+import { avaaMerkinta } from './lib/merkinta.js';
 import {
-  TILAT, LOMAKEOSIOT, OSIOT,
-  osioMaaritys, osioNimi, osioJarjestys,
+  TILAT, LOMAKEOSIOT, OSIOT, MITTALAITTEET, MITTAYKSIKOT,
+  osioMaaritys, osioNimi, osioJarjestys, yksikonNimi,
 } from './data/tarkastuskohdat.js';
 
 const YLAPALKKI = document.getElementById('ylapalkki');
@@ -20,6 +23,7 @@ const DIALOGI = document.getElementById('dialogi');
 
 let asetukset = null;
 let kohde = null;               // avoinna oleva kohde
+let tallennusPysyva = null;     // null = ei tiedossa / ei tuettu
 const kuvaUrlit = new Map();    // avain -> object URL, vapautetaan näkymän vaihtuessa
 let tallennusAjastin = null;
 let tallentamatta = false;      // onko muutoksia, joita ei ole vielä kirjoitettu
@@ -62,6 +66,22 @@ function vahvista(viesti, vahvistaTeksti = 'Poista') {
         h('button', { class: 'ensisijainen', onclick: () => sulje(true) }, vahvistaTeksti)),
     );
     DIALOGI.addEventListener('cancel', () => resolve(false), { once: true });
+    DIALOGI.showModal();
+  });
+}
+
+/** Monivalintadialogi. Palauttaa valitun id:n tai null. */
+function valitse(viesti, vaihtoehdot) {
+  return new Promise((resolve) => {
+    const sulje = (tulos) => { DIALOGI.close(); resolve(tulos); };
+    DIALOGI.querySelector('#dialogi-sisalto').replaceChildren(
+      h('p', null, viesti),
+      h('div', { class: 'napit' },
+        h('button', { onclick: () => sulje(null) }, 'Peruuta'),
+        ...vaihtoehdot.map((v) =>
+          h('button', { class: 'ensisijainen', onclick: () => sulje(v.id) }, v.teksti))),
+    );
+    DIALOGI.addEventListener('cancel', () => resolve(null), { once: true });
     DIALOGI.showModal();
   });
 }
@@ -169,16 +189,67 @@ async function naytaKohdelista() {
       h('span', { class: 'himmea' }, '›'));
   });
 
+  const varoitus = tallennusPysyva === false
+    ? h('div', { class: 'kortti varoitus' },
+      h('strong', null, 'Tallennustila ei ole pysyvä'),
+      h('p', null, 'Puhelin voi tyhjentää sovelluksen tiedot muistin loppuessa. '
+        + 'Vie kohde paketiksi heti tarkastuksen jälkeen, niin työ ei ole vain '
+        + 'yhden tallennuspaikan varassa.'))
+    : null;
+
   SISALTO.replaceChildren(
+    varoitus,
     h('h2', null, 'Kohteet'),
     lista.length ? h('div', null, lista)
       : h('div', { class: 'kortti himmea' },
-        'Ei vielä kohteita. Aloita uudella tarkastuksella.'),
+        'Ei vielä kohteita. Aloita uudella tarkastuksella tai tuo paketti.'),
   );
+
+  const tuontiValitsin = h('input', {
+    type: 'file', accept: '.zip,application/zip', style: 'display:none',
+    onchange: (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) tuoPaketti(f); },
+  });
 
   ALAPALKKI.hidden = false;
   ALAPALKKI.replaceChildren(
+    h('button', { onclick: () => tuontiValitsin.click() }, 'Tuo paketti'),
+    tuontiValitsin,
     h('button', { class: 'ensisijainen', onclick: uusiKohde }, '+ Uusi tarkastus'));
+}
+
+async function tuoPaketti(tiedosto) {
+  ilmoita('Luetaan pakettia…');
+  let esikatselu;
+  try {
+    esikatselu = await tuonti.esikatseleTuonti(tiedosto);
+  } catch (e) {
+    ilmoita(e.message, true);
+    return;
+  }
+
+  const { kohde: tuotava, kuvia, liitteita, onJoOlemassa } = esikatselu;
+  const kuvaus = `${tuotava.nimi || 'Nimetön kohde'} — ${kuvia} kuvaa, ${liitteita} liitettä`;
+
+  let tapa = 'korvaa';
+  if (onJoOlemassa) {
+    const valinta = await valitse(
+      `Kohde "${tuotava.nimi}" on jo sovelluksessa.`,
+      [{ id: 'korvaa', teksti: 'Korvaa' }, { id: 'kopio', teksti: 'Tuo kopiona' }]);
+    if (!valinta) return;
+    tapa = valinta;
+  } else if (!await vahvista(`Tuodaanko ${kuvaus}?`, 'Tuo')) {
+    return;
+  }
+
+  try {
+    const { kohde: tuotu, puuttuvia } = await tuonti.tuoKohde(esikatselu, tapa);
+    ilmoita(puuttuvia
+      ? `Tuotu, mutta ${puuttuvia} kuvaa puuttui paketista.`
+      : 'Kohde tuotu.', puuttuvia > 0);
+    siirry(`/kohde/${tuotu.id}`);
+  } catch (e) {
+    ilmoita(`Tuonti epäonnistui: ${e.message}`, true);
+  }
 }
 
 function pvm(iso) {
@@ -187,18 +258,38 @@ function pvm(iso) {
   return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`;
 }
 
+function tanaan() {
+  const d = new Date();
+  return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()}`;
+}
+
 async function uusiKohde() {
   const nimi = await kysy('Kohteen osoite tai nimi', '');
   if (nimi === null) return;
+
+  // Pysyvää tallennustilaa kannattaa pyytää käyttäjän eleestä: selain myöntää
+  // sen silloin todennäköisemmin kuin sivun latauksen yhteydessä.
+  if (tallennusPysyva !== true) {
+    tallennusPysyva = await db.pyydaPysyvaTallennus();
+  }
+
+  const paiva = tanaan();
   const uusi = {
     id: `k_${Date.now().toString(36)}`,
     nimi: nimi || 'Nimetön kohde',
     luotu: new Date().toISOString(),
-    lomake: { lahtotiedot: { katuosoite: nimi, tarkastajat: asetukset.tarkastaja || '' },
-      olosuhteet: {}, rakennustiedot: {} },
+    lomake: {
+      lahtotiedot: {
+        katuosoite: nimi,
+        tarkastajat: asetukset.tarkastaja || '',
+        ajankohta: paiva,
+      },
+      olosuhteet: {},
+      rakennustiedot: {},
+    },
     tiivistelma: '',
     rajoitukset: '',
-    paivays: '',
+    paivays: paiva,
     osiot: {},
   };
   await db.tallennaKohde(uusi);
@@ -284,8 +375,12 @@ async function naytaKohde() {
     kenttaInput('Raportin päiväys', kohde.paivays,
       (v) => { kohde.paivays = v; tallennaPian(); }, 'text', 'esim. 28.7.2026'),
 
+    h('h2', null, 'Liitteet'),
+    await liiteLohko(),
+
     h('h2', null, 'Kohteen hallinta'),
     h('div', { class: 'kortti' },
+      h('p', { class: viemattaMuutoksia() ? 'varoitusteksti' : 'himmea' }, vientiTila()),
       h('button', { style: 'width:100%;margin-bottom:8px', onclick: nimeaKohde }, 'Nimeä kohde uudelleen'),
       h('button', { class: 'vaarallinen', style: 'width:100%', onclick: poistaNykyKohde },
         'Poista kohde')),
@@ -296,6 +391,65 @@ async function naytaKohde() {
     h('button', { onclick: () => siirry(`/ai/${kohde.id}`) },
       kohde.ai ? '✓ Raporttitekstit' : 'Luo raporttitekstit'),
     h('button', { class: 'ensisijainen', onclick: vieKohde }, 'Vie paketti'));
+}
+
+/** Onko kohdetta muokattu viimeisimmän viennin jälkeen? */
+function viemattaMuutoksia() {
+  if (!kohde.viety) return true;
+  return (kohde.muokattu || '') > kohde.viety;
+}
+
+function vientiTila() {
+  if (!kohde.viety) return 'Kohdetta ei ole viety kertaakaan — vie paketti talteen.';
+  const viety = `Viimeksi viety ${pvm(kohde.viety)}`;
+  return viemattaMuutoksia() ? `${viety}. Sen jälkeen on tullut muutoksia.` : `${viety}.`;
+}
+
+// --- Liitteet ----------------------------------------------------------------
+
+async function liiteLohko() {
+  const liitteet = await db.haeKohteenLiitteet(kohde.id);
+  const valitsin = h('input', {
+    type: 'file', multiple: true, style: 'display:none',
+    onchange: (e) => { const t = Array.from(e.target.files); e.target.value = ''; lisaaLiitteet(t); },
+  });
+
+  const rivit = liitteet.map((l) => h('div', { class: 'liiterivi' },
+    h('span', { class: 'nimi' }, l.nimi,
+      h('span', { class: 'meta' }, muotoileKoko(l.koko || 0))),
+    h('button', {
+      class: 'vaarallinen', onclick: () => poistaLiitetiedosto(l),
+    }, 'Poista')));
+
+  const yhteensa = liitteet.reduce((s, l) => s + (l.koko || 0), 0);
+
+  return h('div', { class: 'kortti' },
+    liitteet.length
+      ? h('div', null, rivit,
+        h('p', { class: 'himmea' }, `Yhteensä ${muotoileKoko(yhteensa)}`))
+      : h('p', { class: 'himmea' },
+        'Energiatodistus, piirustukset, isännöitsijäntodistus… '
+        + 'Liitteet menevät pakettiin lisatiedot-kansioon, eivät raporttiin.'),
+    h('button', { style: 'width:100%', onclick: () => valitsin.click() }, '+ Lisää tiedosto'),
+    valitsin);
+}
+
+async function lisaaLiitteet(tiedostot) {
+  if (!tiedostot.length) return;
+  ilmoita(`Tallennetaan ${tiedostot.length} liitettä…`);
+  for (const t of tiedostot) {
+    const avain = `${kohde.id}/liite/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    await db.tallennaLiite(avain, kohde.id, t.name, t);
+  }
+  await tallennaHeti();
+  ilmoita('Liitteet tallennettu.');
+  naytaKohde();
+}
+
+async function poistaLiitetiedosto(liite) {
+  if (!await vahvista(`Poistetaanko liite "${liite.nimi}"?`)) return;
+  await db.poistaLiite(liite.avain);
+  naytaKohde();
 }
 
 async function monistaOsio(perusId) {
@@ -347,12 +501,20 @@ function kenttaInput(nimi, arvo, muutos, tyyppi = 'text', vihje = '') {
 }
 
 function kenttaTextarea(nimi, arvo, muutos, rivit = 3, vihje = '') {
+  const kentta = h('textarea', {
+    rows: rivit, value: arvo || '', placeholder: vihje,
+    oninput: (e) => muutos(e.target.value),
+  });
   return h('div', { class: 'kentta' },
     h('label', null, nimi),
-    h('textarea', {
-      rows: rivit, value: arvo || '', placeholder: vihje,
-      oninput: (e) => muutos(e.target.value),
-    }));
+    saneluKaari(kentta, muutos));
+}
+
+/** Kietoo tekstikentän ja sanelupainikkeen samaan riviin. */
+function saneluKaari(kentta, muutos) {
+  const nappi = liitaSanelu(kentta, muutos, ilmoita);
+  if (!nappi) return kentta;
+  return h('div', { class: 'sanelurivi' }, kentta, nappi);
 }
 
 // --- Näkymä: lomakeosio ------------------------------------------------------
@@ -408,6 +570,9 @@ async function naytaOsio(osioId) {
             'Tyhjennä')),
         h('div', { class: 'kortti' }, kohtaLohkot));
     }
+
+    // Mittaukset
+    osat.push(mittausLohko(osioId));
 
     osat.push(kenttaTextarea('Muuta huomioitavaa', o.muuta,
       (v) => { o.muuta = v; tallennaPian(); }, 3,
@@ -470,14 +635,18 @@ function piirraKohta(osioId, teksti, i) {
     if (!vaatii) { huomautusPaikka.replaceChildren(); return; }
     const arvo = o.huomautukset[i] || '';
     huomautusPaikka.className = `huomautus${arvo.trim() ? '' : ' pakollinen'}`;
-    huomautusPaikka.replaceChildren(h('textarea', {
+    const muutos = (v) => {
+      o.huomautukset[i] = v;
+      huomautusPaikka.className = `huomautus${v.trim() ? '' : ' pakollinen'}`;
+      tallennaPian();
+    };
+    const kentta = h('textarea', {
       rows: 2, value: arvo, placeholder: 'Miksi ei ole kunnossa?',
-      oninput: (e) => {
-        o.huomautukset[i] = e.target.value;
-        huomautusPaikka.className = `huomautus${e.target.value.trim() ? '' : ' pakollinen'}`;
-        tallennaPian();
-      },
-    }));
+      oninput: (e) => muutos(e.target.value),
+    });
+    // Sanelu on tarpeellisin juuri tassa: huomautus kirjoitetaan usein
+    // ryomintatilassa tai ullakolla, jossa nappaimiston kaytto on hankalaa.
+    huomautusPaikka.replaceChildren(saneluKaari(kentta, muutos));
   }
 
   const napit = TILAT.map((t) => h('button', {
@@ -499,6 +668,78 @@ function piirraKohta(osioId, teksti, i) {
     h('div', { class: 'teksti' }, teksti),
     h('div', { class: 'tilat' }, napit),
     huomautusPaikka);
+}
+
+// --- Mittaukset --------------------------------------------------------------
+
+function mittausLohko(osioId) {
+  const o = osioTila(osioId);
+  if (!o.mittaukset) o.mittaukset = [];
+
+  const lisaa = h('button', {
+    style: 'width:100%',
+    onclick: () => {
+      o.mittaukset.push({ paikka: '', lukema: '', yksikko: '', laite: 'gann', huom: '' });
+      tallennaPian();
+      naytaOsio(osioId);
+    },
+  }, '+ Lisää mittaus');
+
+  if (!o.mittaukset.length) {
+    // Osiot joissa ei mitata pysyvät siisteinä: pelkkä painike, ei taulukkoa.
+    return h('div', { class: 'kentta' }, lisaa);
+  }
+
+  const rivit = o.mittaukset.map((m, i) => h('div', { class: 'mittaus' },
+    h('div', { class: 'mittausotsikko' },
+      h('span', null, `Mittaus ${i + 1}`),
+      h('button', {
+        class: 'vaarallinen',
+        onclick: () => {
+          o.mittaukset.splice(i, 1);
+          tallennaPian();
+          naytaOsio(osioId);
+        },
+      }, 'Poista')),
+
+    kenttaInput('Mittauspaikka', m.paikka,
+      (v) => { m.paikka = v; tallennaPian(); }, 'text', 'esim. lattia suihkun edessä'),
+
+    h('div', { class: 'mittausrivi' },
+      h('div', { class: 'kentta' },
+        h('label', null, 'Lukema'),
+        h('input', {
+          value: m.lukema || '', inputmode: 'decimal',
+          oninput: (e) => { m.lukema = e.target.value; tallennaPian(); },
+        })),
+      h('div', { class: 'kentta' },
+        h('label', null, 'Yksikkö'),
+        h('select', {
+          onchange: (e) => { m.yksikko = e.target.value; tallennaPian(); },
+        }, MITTAYKSIKOT.map((y) =>
+          h('option', { value: y, selected: y === (m.yksikko || '') }, yksikonNimi(y)))))),
+
+    h('div', { class: 'kentta' },
+      h('label', null, 'Laite'),
+      h('select', {
+        onchange: (e) => {
+          m.laite = e.target.value;
+          // Laitteen vaihto esitäyttää yksikön, mutta ei ylikirjoita
+          // käyttäjän omaa valintaa jos lukema on jo kirjattu.
+          const laite = MITTALAITTEET.find((l) => l.id === m.laite);
+          if (laite && !m.lukema) m.yksikko = laite.yksikko;
+          tallennaPian();
+          naytaOsio(osioId);
+        },
+      }, MITTALAITTEET.map((l) =>
+        h('option', { value: l.id, selected: l.id === m.laite }, l.nimi)))),
+
+    kenttaInput('Huomautus', m.huom,
+      (v) => { m.huom = v; tallennaPian(); }, 'text', 'valinnainen')));
+
+  return h('div', null,
+    h('h2', null, `Mittaukset (${o.mittaukset.length})`),
+    h('div', { class: 'kortti' }, rivit, lisaa));
 }
 
 function merkitseKaikki(osioId, tila) {
@@ -526,15 +767,21 @@ async function piirraKuvat(osioId, maxKuvia) {
         const blob = await db.haeKuva(kuva.avain);
         if (blob) { url = URL.createObjectURL(blob); kuvaUrlit.set(kuva.avain, url); }
       }
+      const merkitty = Boolean(kuva.merkinnat?.length);
       ruudukko.append(h('div', null,
         h('div', { class: 'kuvapaikka' },
-          url ? h('img', { src: url, alt: `Kuva ${i + 1}` })
+          url
+            ? h('img', {
+              src: url, alt: `Kuva ${i + 1}`, title: 'Napauta merkitäksesi',
+              onclick: () => merkitseKuva(osioId, i),
+            })
             : h('span', { class: 'himmea' }, 'Kuvaa ei löydy'),
           h('button', {
             class: 'poista', 'aria-label': 'Poista kuva',
             onclick: () => poistaKuva(osioId, i),
           }, '×'),
-          h('span', { class: 'numero' }, `Kuva ${i + 1}`)),
+          h('span', { class: 'numero' },
+            `Kuva ${i + 1}`, merkitty ? h('span', { class: 'merkittytunnus' }, 'merkitty') : null)),
         h('div', { class: 'kuvateksti' },
           h('input', {
             value: kuva.teksti || '', placeholder: 'Kuvateksti (Claude täydentää)',
@@ -584,10 +831,59 @@ async function poistaKuva(osioId, i) {
   const kuva = o.kuvat[i];
   if (!kuva) return;
   if (!await vahvista('Poistetaanko kuva?')) return;
-  await db.poistaKuva(kuva.avain);
-  const url = kuvaUrlit.get(kuva.avain);
-  if (url) { URL.revokeObjectURL(url); kuvaUrlit.delete(kuva.avain); }
+  for (const avain of [kuva.avain, kuva.alkuperaAvain].filter(Boolean)) {
+    await db.poistaKuva(avain);
+    const url = kuvaUrlit.get(avain);
+    if (url) { URL.revokeObjectURL(url); kuvaUrlit.delete(avain); }
+  }
   o.kuvat.splice(i, 1);
+  await tallennaHeti();
+  naytaOsio(osioId);
+}
+
+/**
+ * Avaa merkintänäkymän. Alkuperäinen kuva säilyy aina omalla avaimellaan,
+ * joten merkinnät voi tehdä uusiksi tai poistaa kokonaan.
+ */
+async function merkitseKuva(osioId, i) {
+  const o = osioTila(osioId);
+  const kuva = o.kuvat[i];
+  if (!kuva) return;
+
+  const alkuperaAvain = kuva.alkuperaAvain || kuva.avain;
+  const alkuperainen = await db.haeKuva(alkuperaAvain);
+  if (!alkuperainen) { ilmoita('Kuvaa ei löytynyt.', true); return; }
+
+  let tulos;
+  try {
+    tulos = await avaaMerkinta(alkuperainen, kuva.merkinnat || []);
+  } catch (e) {
+    ilmoita(`Merkintä epäonnistui: ${e.message}`, true);
+    return;
+  }
+  if (!tulos) return;   // peruttiin
+
+  if (!tulos.merkinnat.length) {
+    // Kaikki merkinnät kumottiin: palataan alkuperäiseen kuvaan.
+    if (kuva.alkuperaAvain) {
+      await db.poistaKuva(kuva.avain);
+      kuva.avain = kuva.alkuperaAvain;
+      delete kuva.alkuperaAvain;
+    }
+    delete kuva.merkinnat;
+  } else {
+    if (!kuva.alkuperaAvain) {
+      kuva.alkuperaAvain = kuva.avain;
+      kuva.avain = `${kuva.alkuperaAvain}-merkitty`;
+    }
+    await db.tallennaKuva(kuva.avain, kohde.id, tulos.blob);
+    kuva.merkinnat = tulos.merkinnat;
+  }
+
+  // Vanha esikatselu-URL pois, jotta merkitty versio näkyy heti.
+  const vanha = kuvaUrlit.get(kuva.avain);
+  if (vanha) { URL.revokeObjectURL(vanha); kuvaUrlit.delete(kuva.avain); }
+
   await tallennaHeti();
   naytaOsio(osioId);
 }
@@ -721,6 +1017,10 @@ async function vieKohde() {
     const { zip, kansio, tiedostoja, puuttuvia } = await vienti.teeVientiPaketti(kohde);
     const tulos = await vienti.jaaTaiLataa(zip, `${kansio}.zip`);
     if (tulos === 'peruttu') return;
+    // Merkitään vietäväksi juuri se tila joka pakettiin meni: kun viety ja
+    // muokattu ovat samat, muutoksia ei ole tullut viennin jälkeen.
+    kohde.viety = kohde.muokattu || new Date().toISOString();
+    await db.tallennaKohde(kohde, false);
     ilmoita(`${tiedostoja} tiedostoa, ${muotoileKoko(zip.size)}`
       + (puuttuvia ? ` — ${puuttuvia} kuvaa puuttui!` : ''), puuttuvia > 0);
   } catch (e) {
@@ -787,10 +1087,36 @@ async function naytaAsetukset() {
       h('button', { style: 'width:100%', onclick: tallenna }, 'Tallenna')),
 
     h('h2', null, 'Tallennustila'),
+    h('div', { class: 'kortti' },
+      h('p', { class: 'himmea' },
+        tila
+          ? `Käytössä ${muotoileKoko(tila.kaytetty)} / ${muotoileKoko(tila.kiintio)}`
+          : 'Tallennustilan tietoja ei saatavilla.'),
+      h('p', { class: tallennusPysyva === true ? 'himmea' : 'varoitusteksti' },
+        tallennusPysyva === true
+          ? 'Tallennustila on pysyvä — puhelin ei poista tietoja itsestään.'
+          : 'Tallennustila EI ole pysyvä. Puhelin voi tyhjentää tiedot muistin '
+            + 'loppuessa, joten vie kohteet paketiksi talteen.'),
+      tallennusPysyva === true ? null : h('button', {
+        style: 'width:100%',
+        onclick: async () => {
+          tallennusPysyva = await db.pyydaPysyvaTallennus();
+          ilmoita(tallennusPysyva === true
+            ? 'Pysyvä tallennustila myönnetty.'
+            : 'Selain ei myöntänyt pysyvää tallennustilaa. Se onnistuu usein, '
+              + 'kun sovellus on asennettu kotinäytölle ja sitä on käytetty hetken.',
+          tallennusPysyva !== true);
+          naytaAsetukset();
+        },
+      }, 'Pyydä pysyvää tallennustilaa')),
+
+    h('h2', null, 'Sanelu'),
     h('div', { class: 'kortti himmea' },
-      tila
-        ? `Käytössä ${muotoileKoko(tila.kaytetty)} / ${muotoileKoko(tila.kiintio)}`
-        : 'Tallennustilan tietoja ei saatavilla.'),
+      saneluTuettu()
+        ? 'Tekstikenttien mikrofonipainikkeella voit sanella kirjoittamisen sijaan. '
+          + 'Selain lähettää äänen Googlen palvelimille tunnistettavaksi — sama '
+          + 'koskee puhelimen näppäimistön sanelua.'
+        : 'Tämä selain ei tue sanelua.'),
   );
 
   ALAPALKKI.hidden = true;
@@ -809,7 +1135,9 @@ window.addEventListener('beforeunload', () => {
 
 (async function kaynnista() {
   asetukset = await db.haeAsetukset();
+  tallennusPysyva = await db.onkoTallennusPysyva();
   await reititys();
+
   if ('serviceWorker' in navigator) {
     // Uusi versio ottaa ohjauksen heti (sw.js kutsuu skipWaiting + claim).
     // Ladataan sivu kerran uudelleen, jotta puhelin saa päivityksen käyttöön
@@ -822,5 +1150,16 @@ window.addEventListener('beforeunload', () => {
       location.reload();
     });
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline-tuki valinnainen */ });
+  }
+
+  // Pysyvää tallennustilaa pyydetään vasta rekisteröinnin jälkeen eikä sitä
+  // odoteta: persist() voi jäädä roikkumaan lupapäätöstä odottaessaan, ja
+  // aiemmin se esti service workerin asentumisen kokonaan — eli offline-tuen.
+  if (tallennusPysyva === false) {
+    db.pyydaPysyvaTallennus().then((tulos) => {
+      if (tulos === tallennusPysyva) return;
+      tallennusPysyva = tulos;
+      if (!location.hash || location.hash === '#/') reititys();
+    });
   }
 })();

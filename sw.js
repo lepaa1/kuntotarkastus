@@ -7,7 +7,7 @@
 // TÄRKEÄÄ: kasvata versionumeroa aina kun julkaiset muutoksia. Selain asentaa
 // service workerin uudelleen vain jos tämä tiedosto muuttuu — muuten puhelin
 // voi jäädä käyttämään vanhaa versiota.
-const VALIMUISTI = 'kuntotarkastus-v2';
+const VALIMUISTI = 'kuntotarkastus-v4';
 
 const TIEDOSTOT = [
   './',
@@ -20,6 +20,9 @@ const TIEDOSTOT = [
   './lib/kuva.js',
   './lib/zip.js',
   './lib/vienti.js',
+  './lib/tuonti.js',
+  './lib/sanelu.js',
+  './lib/merkinta.js',
   './lib/ai.js',
   './icons/ikoni-192.png',
   './icons/ikoni-512.png',

@@ -13,6 +13,30 @@ export const TILAT = [
 
 export const KUVIA_PER_OSIO = 4;
 
+// --- Mittaukset --------------------------------------------------------------
+//
+// Rakenneosakohtaiset kosteusmittaukset. Gannin pallopääanturi on
+// pintakosteudenosoitin: se antaa suhteellisen lukeman ilman yksikköä, joten
+// sen oletusyksikkö on tyhjä. Sovellus ei tulkitse lukemia eikä tunne
+// raja-arvoja — arvion tekee tarkastaja.
+
+export const MITTALAITTEET = [
+  { id: 'gann',    nimi: 'Gann HYDROMETTE Compact B', yksikko: '' },
+  { id: 'vaisala', nimi: 'Vaisala HM-40',             yksikko: 'RH %' },
+  { id: 'muu',     nimi: 'Muu',                       yksikko: '' },
+];
+
+export const MITTAYKSIKOT = ['', 'RH %', '°C', 'g/m³', 'paino-%'];
+
+/** Yksikön näyttömuoto: tyhjä yksikkö tarkoittaa suhteellista lukemaa. */
+export function yksikonNimi(yksikko) {
+  return yksikko || '–';
+}
+
+export function laitteenNimi(laiteId) {
+  return MITTALAITTEET.find((l) => l.id === laiteId)?.nimi || laiteId || '';
+}
+
 // --- Lomakeosiot (raportin osiot 2, 3, 5, 6 + rajoitukset + päiväys) ---------
 
 export const LAHTOTIEDOT = {

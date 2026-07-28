@@ -269,6 +269,108 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--tumma-vaale
 
 .kuvapaikka .plus { font-size: 30px; line-height: 1; }
 
+.kuvapaikka img { cursor: pointer; }
+.merkittytunnus {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--ei);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+/* --- Sanelu ---------------------------------------------------------------- */
+
+.sanelurivi { display: flex; gap: 6px; align-items: flex-start; }
+.sanelurivi textarea, .sanelurivi input { flex: 1; min-width: 0; }
+
+button.sanelu {
+  flex: 0 0 46px;
+  min-width: 46px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+button.sanelu.kuuntelee {
+  background: var(--ei);
+  border-color: var(--ei);
+  animation: syke 1.2s ease-in-out infinite;
+}
+@keyframes syke { 50% { opacity: .55; } }
+
+/* --- Mittaukset ------------------------------------------------------------ */
+
+.mittaus {
+  border-bottom: 1px solid var(--reuna);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+.mittaus:last-of-type { border-bottom: 0; }
+.mittausotsikko {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.mittausotsikko span { font-weight: 600; font-size: 14px; }
+.mittausotsikko button { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+.mittausrivi { display: flex; gap: 8px; }
+.mittausrivi .kentta { flex: 1; min-width: 0; }
+
+/* --- Liitteet -------------------------------------------------------------- */
+
+.liiterivi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--reuna);
+}
+.liiterivi .nimi { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
+.liiterivi .meta { display: block; font-size: 12px; color: var(--himmea); }
+.liiterivi button { min-height: 36px; padding: 4px 12px; font-size: 13px; }
+
+/* --- Varoitukset ----------------------------------------------------------- */
+
+.kortti.varoitus {
+  border-color: var(--osittain);
+  border-left-width: 4px;
+  background: #fffaf0;
+}
+.kortti.varoitus strong { display: block; margin-bottom: 4px; }
+.kortti.varoitus p { margin: 0; font-size: 14px; color: var(--himmea); }
+.varoitusteksti { color: var(--osittain); font-size: 14px; font-weight: 600; }
+
+/* --- Kuvan merkintä -------------------------------------------------------- */
+
+.merkinta-peite {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #101216;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 8px calc(8px + env(safe-area-inset-bottom));
+}
+.merkinta-alue {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.merkinta-alue canvas { touch-action: none; border-radius: 4px; }
+
+.merkinta-tyokalut, .merkinta-toiminnot { display: flex; gap: 6px; padding: 8px 0; }
+.merkinta-tyokalut button, .merkinta-toiminnot button { flex: 1; font-size: 14px; }
+.merkinta-tyokalut button[aria-pressed="true"] {
+  background: var(--tumma-vaalea);
+  border-color: var(--tumma-vaalea);
+  color: #fff;
+  font-weight: 600;
+}
+
 /* --- Edistyminen ----------------------------------------------------------- */
 
 .palkki { height: 6px; background: var(--reuna); border-radius: 3px; overflow: hidden; margin-top: 6px; }
