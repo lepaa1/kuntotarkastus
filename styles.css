@@ -1,0 +1,331 @@
+/* Kuntotarkastus — mobiilikäyttöön optimoitu tyyli.
+   Isot kosketuskohteet (min 44px), suuri kontrasti myös ulkona. */
+
+:root {
+  --tumma: #1f3a5f;
+  --tumma-vaalea: #2d5183;
+  --tausta: #f4f5f7;
+  --kortti: #ffffff;
+  --reuna: #d8dce3;
+  --teksti: #1a1d23;
+  --himmea: #666e7a;
+  --ok: #1a7f45;
+  --osittain: #b8860b;
+  --ei: #b3261e;
+  --neutraali: #6b7280;
+  --varjo: 0 1px 3px rgba(0, 0, 0, .12);
+  --reunapehmuste: max(12px, env(safe-area-inset-left));
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--tausta);
+  color: var(--teksti);
+  font: 16px/1.45 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  overscroll-behavior-y: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Ylä- ja alapalkki ---------------------------------------------------- */
+
+#ylapalkki {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: env(safe-area-inset-top) var(--reunapehmuste) 0;
+  min-height: 52px;
+  background: var(--tumma);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+#otsikko {
+  flex: 1;
+  margin: 0;
+  padding: 12px 0;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ikonipainike {
+  background: none;
+  border: 0;
+  color: #fff;
+  font-size: 24px;
+  line-height: 1;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.ikonipainike[hidden] { display: none; }
+
+#sisalto {
+  flex: 1;
+  padding: 12px var(--reunapehmuste) 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#alapalkki {
+  display: flex;
+  gap: 8px;
+  padding: 8px var(--reunapehmuste) calc(8px + env(safe-area-inset-bottom));
+  background: var(--kortti);
+  border-top: 1px solid var(--reuna);
+}
+#alapalkki[hidden] { display: none; }
+#alapalkki button { flex: 1; }
+
+/* --- Peruskomponentit ------------------------------------------------------ */
+
+.kortti {
+  background: var(--kortti);
+  border: 1px solid var(--reuna);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  box-shadow: var(--varjo);
+}
+
+button, .painike {
+  font: inherit;
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--reuna);
+  background: var(--kortti);
+  color: var(--teksti);
+  cursor: pointer;
+}
+
+button.ensisijainen {
+  background: var(--tumma);
+  border-color: var(--tumma);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.vaarallinen { color: var(--ei); border-color: var(--ei); }
+button:disabled { opacity: .5; cursor: default; }
+
+h2 { font-size: 18px; margin: 18px 0 8px; }
+h2:first-child { margin-top: 4px; }
+
+.himmea { color: var(--himmea); font-size: 14px; }
+
+label { display: block; font-size: 13px; font-weight: 600; color: var(--himmea); margin-bottom: 3px; }
+
+input, textarea, select {
+  font: inherit;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--reuna);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--teksti);
+  min-height: 44px;
+}
+textarea { resize: vertical; }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--tumma-vaalea); outline-offset: -1px; }
+
+.kentta { margin-bottom: 12px; }
+
+/* --- Kohdelista ------------------------------------------------------------ */
+
+.kohde-rivi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 8px;
+  min-height: 62px;
+}
+.kohde-rivi .nimi { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.kohde-rivi .meta { display: block; font-weight: 400; font-size: 13px; color: var(--himmea); }
+
+/* --- Osiolista ------------------------------------------------------------- */
+
+.osio-rivi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  min-height: 56px;
+}
+.osio-rivi .nro {
+  flex: 0 0 34px;
+  font-variant-numeric: tabular-nums;
+  color: var(--himmea);
+  font-size: 13px;
+}
+/* min-width:0 sallii nimen kutistua, jottei rivi vuoda kortin reunan yli. */
+.osio-rivi .nimi { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.osio-rivi .tila { flex: 0 0 auto; font-size: 13px; color: var(--himmea); white-space: nowrap; }
+.osio-rivi.valmis .tila { color: var(--ok); font-weight: 600; }
+.osio-rivi.puutteita .tila { color: var(--ei); font-weight: 600; }
+
+/* --- Tarkastuskohta -------------------------------------------------------- */
+
+.kohta { border-bottom: 1px solid var(--reuna); padding: 10px 0; }
+.kohta:last-of-type { border-bottom: 0; }
+.kohta .teksti { margin-bottom: 8px; }
+
+.tilat { display: flex; gap: 0; }
+.tilat button {
+  flex: 1;
+  min-height: 44px;
+  padding: 6px 2px;
+  font-size: 13px;
+  border-radius: 0;
+  border-left-width: 0;
+  background: #fff;
+  color: var(--himmea);
+}
+.tilat button:first-child { border-radius: 8px 0 0 8px; border-left-width: 1px; }
+.tilat button:last-child { border-radius: 0 8px 8px 0; }
+
+.tilat button[aria-pressed="true"] { color: #fff; font-weight: 600; }
+.tilat button[aria-pressed="true"][data-tila="kunnossa"]    { background: var(--ok);        border-color: var(--ok); }
+.tilat button[aria-pressed="true"][data-tila="osittain"]    { background: var(--osittain);  border-color: var(--osittain); }
+.tilat button[aria-pressed="true"][data-tila="ei_kunnossa"] { background: var(--ei);        border-color: var(--ei); }
+.tilat button[aria-pressed="true"][data-tila="ei_koske"]    { background: var(--neutraali); border-color: var(--neutraali); }
+
+.huomautus { margin-top: 8px; }
+.huomautus textarea { border-color: var(--osittain); }
+.huomautus.pakollinen textarea { border-color: var(--ei); }
+
+/* --- Kuvat ----------------------------------------------------------------- */
+
+.kuvaruudukko {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.kuvapaikka {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border: 1px dashed var(--reuna);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kuvapaikka img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kuvapaikka .lisaa {
+  border: 0;
+  background: none;
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
+  color: var(--himmea);
+}
+.kuvapaikka .poista {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  border: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+.kuvapaikka .numero {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 3px 6px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+}
+
+.kuvateksti { margin-top: 6px; }
+.kuvateksti input { min-height: 40px; font-size: 14px; }
+/* Tyhjän kuvapaikan välike pitää ruudukon rivit linjassa. */
+.kuvateksti.valike { visibility: hidden; }
+
+.kuvapaikka .plus { font-size: 30px; line-height: 1; }
+
+/* --- Edistyminen ----------------------------------------------------------- */
+
+.palkki { height: 6px; background: var(--reuna); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.palkki span { display: block; height: 100%; background: var(--ok); transition: width .2s; }
+
+/* --- Ilmoitukset ja dialogi ------------------------------------------------ */
+
+#ilmoitus {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: 90vw;
+  padding: 12px 18px;
+  background: #222;
+  color: #fff;
+  border-radius: 22px;
+  font-size: 14px;
+  z-index: 100;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+}
+#ilmoitus[hidden] { display: none; }
+#ilmoitus.virhe { background: var(--ei); }
+
+#dialogi {
+  border: 0;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: min(420px, 92vw);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
+}
+#dialogi::backdrop { background: rgba(0, 0, 0, .45); }
+#dialogi .napit { display: flex; gap: 8px; margin-top: 14px; }
+#dialogi .napit button { flex: 1; }
+
+/* --- AI-näkymä ------------------------------------------------------------- */
+
+.loki {
+  font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #10151c;
+  color: #cfe3ff;
+  padding: 10px;
+  border-radius: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.tunnus {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--reuna);
+  color: var(--himmea);
+}
+.tunnus.ok { background: #dcf3e5; color: var(--ok); }
+.tunnus.ei { background: #fbe3e1; color: var(--ei); }

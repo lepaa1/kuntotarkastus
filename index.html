@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f3a5f">
+  <title>Kuntotarkastus</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/ikoni-192.png">
+  <link rel="apple-touch-icon" href="icons/ikoni-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header id="ylapalkki">
+    <button id="takaisin" class="ikonipainike" hidden aria-label="Takaisin">‹</button>
+    <h1 id="otsikko">Kuntotarkastus</h1>
+    <button id="valikko" class="ikonipainike" aria-label="Asetukset">⚙</button>
+  </header>
+
+  <main id="sisalto"></main>
+
+  <footer id="alapalkki" hidden></footer>
+
+  <div id="ilmoitus" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="dialogi">
+    <div id="dialogi-sisalto"></div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
