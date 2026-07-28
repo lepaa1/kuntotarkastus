@@ -7,7 +7,7 @@
 // TÄRKEÄÄ: kasvata versionumeroa aina kun julkaiset muutoksia. Selain asentaa
 // service workerin uudelleen vain jos tämä tiedosto muuttuu — muuten puhelin
 // voi jäädä käyttämään vanhaa versiota.
-const VALIMUISTI = 'kuntotarkastus-v1';
+const VALIMUISTI = 'kuntotarkastus-v2';
 
 const TIEDOSTOT = [
   './',
@@ -23,6 +23,7 @@ const TIEDOSTOT = [
   './lib/ai.js',
   './icons/ikoni-192.png',
   './icons/ikoni-512.png',
+  './icons/ikoni-maskable-512.png',
 ];
 
 self.addEventListener('install', (e) => {
