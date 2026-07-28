@@ -1133,11 +1133,23 @@ window.addEventListener('beforeunload', () => {
   if (kohde && tallentamatta) db.tallennaKohde(kohde);
 });
 
-(async function kaynnista() {
-  asetukset = await db.haeAsetukset();
-  tallennusPysyva = await db.onkoTallennusPysyva();
-  await reititys();
+/** Käynnistys epäonnistui — näytetään syy, ei tyhjää ruutua. */
+function naytaKaynnistysvirhe(viesti) {
+  OTSIKKO.textContent = 'Kuntotarkastus';
+  ALAPALKKI.hidden = true;
+  SISALTO.replaceChildren(h('div', { class: 'kortti varoitus' },
+    h('strong', null, 'Sovellus ei käynnistynyt'),
+    h('p', null, viesti),
+    h('button', {
+      class: 'ensisijainen', style: 'width:100%;margin-top:12px',
+      onclick: () => location.reload(),
+    }, 'Yritä uudelleen')));
+}
 
+(async function kaynnista() {
+  // Service worker rekisteröidään ENSIMMÄISENÄ, ennen tietokantaa. Jos
+  // käynnistys kaatuisi tietokantaan ennen tätä, sovellus ei enää koskaan
+  // saisi päivitystä — eikä siis myöskään korjausta siihen vikaan.
   if ('serviceWorker' in navigator) {
     // Uusi versio ottaa ohjauksen heti (sw.js kutsuu skipWaiting + claim).
     // Ladataan sivu kerran uudelleen, jotta puhelin saa päivityksen käyttöön
@@ -1152,9 +1164,24 @@ window.addEventListener('beforeunload', () => {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline-tuki valinnainen */ });
   }
 
+  db.kunVersioVaihtuu(() => {
+    // Toinen ikkuna päivitti tietokannan; tämä yhteys on suljettu eikä
+    // tallennus enää toimisi, joten ladataan sovellus uudelleen.
+    location.reload();
+  });
+
+  try {
+    asetukset = await db.haeAsetukset();
+    tallennusPysyva = await db.onkoTallennusPysyva();
+    await reititys();
+  } catch (e) {
+    console.error(e);
+    naytaKaynnistysvirhe(e.message);
+    return;
+  }
+
   // Pysyvää tallennustilaa pyydetään vasta rekisteröinnin jälkeen eikä sitä
-  // odoteta: persist() voi jäädä roikkumaan lupapäätöstä odottaessaan, ja
-  // aiemmin se esti service workerin asentumisen kokonaan — eli offline-tuen.
+  // odoteta: persist() voi jäädä roikkumaan lupapäätöstä odottaessaan.
   if (tallennusPysyva === false) {
     db.pyydaPysyvaTallennus().then((tulos) => {
       if (tulos === tallennusPysyva) return;
