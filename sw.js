@@ -7,7 +7,7 @@
 // TÄRKEÄÄ: kasvata versionumeroa aina kun julkaiset muutoksia. Selain asentaa
 // service workerin uudelleen vain jos tämä tiedosto muuttuu — muuten puhelin
 // voi jäädä käyttämään vanhaa versiota.
-const VALIMUISTI = 'kuntotarkastus-v5';
+const VALIMUISTI = 'kuntotarkastus-v6';
 
 const TIEDOSTOT = [
   './',
