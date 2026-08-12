@@ -375,6 +375,9 @@ async function naytaKohde() {
     kenttaInput('Raportin päiväys', kohde.paivays,
       (v) => { kohde.paivays = v; tallennaPian(); }, 'text', 'esim. 28.7.2026'),
 
+    h('h2', null, 'Kuvat puhelimeen'),
+    await kuvatPuhelimeenLohko(),
+
     h('h2', null, 'Liitteet'),
     await liiteLohko(),
 
@@ -403,6 +406,122 @@ function vientiTila() {
   if (!kohde.viety) return 'Kohdetta ei ole viety kertaakaan — vie paketti talteen.';
   const viety = `Viimeksi viety ${pvm(kohde.viety)}`;
   return viemattaMuutoksia() ? `${viety}. Sen jälkeen on tullut muutoksia.` : `${viety}.`;
+}
+
+// --- Kuvat puhelimeen --------------------------------------------------------
+//
+// Selain ei pääse kirjoittamaan Androidin kuvagalleriaan (DCIM), joten kuvat
+// ladataan tiedostoina Lataukset-kansioon. Ne näkyvät Galleriassa ja Google
+// Kuvissa omana kansionaan, eivät kamerarullassa.
+
+function tiedostonimeksi(teksti) {
+  return Array.from(teksti)
+    .map((m) => ('<>:"/\\|?*'.includes(m) || m.codePointAt(0) < 32 ? '-' : m))
+    .join('')
+    .trim() || 'kuva';
+}
+
+function lataaTiedosto(blob, nimi) {
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: nimi });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+async function kuvatPuhelimeenLohko() {
+  const kuvia = osioJarjestys(kohde)
+    .reduce((s, id) => s + (kohde.osiot?.[id]?.kuvat || []).length, 0);
+  const tila = await db.kamerakuvienTila(kohde.id);
+
+  if (!kuvia) {
+    return h('div', { class: 'kortti himmea' }, 'Kohteessa ei ole vielä kuvia.');
+  }
+
+  const kpl = (n, yksikko, monikko) => `${n} ${n === 1 ? yksikko : monikko}`;
+
+  const osat = [];
+  if (tila.maara) {
+    osat.push(h('p', { class: 'himmea' },
+      `${kpl(tila.maara, 'alkuperäiskuva', 'alkuperäiskuvaa')} tallessa, `
+      + `${muotoileKoko(tila.tavuja)}. Ne tallentuvat puhelimeen täysikokoisina.`));
+  } else {
+    osat.push(h('p', { class: 'himmea' },
+      'Alkuperäiskuvia ei ole tallessa, joten puhelimeen tallentuu sama '
+      + 'pienennetty versio joka menee raporttiin.'));
+  }
+
+  if (kohde.kuvatPuhelimeen) {
+    osat.push(h('p', { class: 'himmea' },
+      `Tallennettu puhelimeen ${pvm(kohde.kuvatPuhelimeen)}.`));
+  }
+
+  osat.push(h('button', {
+    class: 'ensisijainen', style: 'width:100%',
+    onclick: () => tallennaKuvatPuhelimeen(),
+  }, `Tallenna ${kpl(kuvia, 'kuva', 'kuvaa')} puhelimeen`));
+
+  if (tila.maara) {
+    osat.push(h('button', {
+      style: 'width:100%;margin-top:8px',
+      onclick: () => vapautaAlkuperaiset(tila),
+    }, `Vapauta ${muotoileKoko(tila.tavuja)} tilaa`));
+  }
+
+  osat.push(h('p', { class: 'himmea', style: 'margin-bottom:0' },
+    'Kuvat menevät Lataukset-kansioon. Selain kysyy ensimmäisellä kerralla '
+    + 'luvan tallentaa useita tiedostoja — hyväksy se.'));
+
+  return h('div', { class: 'kortti' }, osat);
+}
+
+async function tallennaKuvatPuhelimeen() {
+  const kohdeNimi = tiedostonimeksi(kohde.nimi || 'Kohde');
+  let tallennettu = 0;
+  let puuttuvia = 0;
+
+  ilmoita('Tallennetaan kuvia…');
+  for (const osioId of osioJarjestys(kohde)) {
+    const kuvat = kohde.osiot?.[osioId]?.kuvat || [];
+    for (let i = 0; i < kuvat.length; i++) {
+      const kuva = kuvat[i];
+      // Ensisijaisesti kameran alkuperäinen, muuten raporttiin menevä versio.
+      const blob = (kuva.kameraAvain && await db.haeKamerakuva(kuva.kameraAvain))
+        || await db.haeKuva(kuva.avain);
+      if (!blob) { puuttuvia++; continue; }
+
+      lataaTiedosto(blob, `${kohdeNimi}_${vienti.kuvatiedostonNimi(osioId, i)}`);
+      tallennettu++;
+      // Pieni tauko latausten väliin: selain voi muuten hylätä osan.
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+
+  if (tallennettu) {
+    kohde.kuvatPuhelimeen = new Date().toISOString();
+    await db.tallennaKohde(kohde, false);
+  }
+  ilmoita(`${tallennettu} ${tallennettu === 1 ? 'kuva' : 'kuvaa'} tallennettu Lataukset-kansioon`
+    + (puuttuvia ? ` — ${puuttuvia} puuttui!` : ''), puuttuvia > 0);
+  naytaKohde();
+}
+
+async function vapautaAlkuperaiset(tila) {
+  const kuvaus = `${tila.maara} ${tila.maara === 1 ? 'alkuperäiskuva' : 'alkuperäiskuvaa'}`;
+  const varmistus = kohde.kuvatPuhelimeen
+    ? `Poistetaanko ${kuvaus} sovelluksesta? Ne on jo tallennettu puhelimeen.`
+    : `Kuvia EI ole vielä tallennettu puhelimeen. Poistetaanko silti ${kuvaus}? `
+      + 'Raporttiin menevät kuvat säilyvät.';
+  if (!await vahvista(varmistus, 'Poista')) return;
+
+  await db.poistaKohteenKamerakuvat(kohde.id);
+  for (const osioId of osioJarjestys(kohde)) {
+    for (const kuva of kohde.osiot?.[osioId]?.kuvat || []) delete kuva.kameraAvain;
+  }
+  await tallennaHeti();
+  ilmoita(`${muotoileKoko(tila.tavuja)} vapautettu.`);
+  naytaKohde();
 }
 
 // --- Liitteet ----------------------------------------------------------------
@@ -817,7 +936,20 @@ async function lisaaKuvia(osioId, tiedostot, maxKuvia) {
       const pieni = await skaalaa(tiedosto);
       const avain = `${kohde.id}/${osioId}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       await db.tallennaKuva(avain, kohde.id, pieni);
-      o.kuvat.push({ avain, teksti: '' });
+      const merkinta = { avain, teksti: '' };
+
+      // Kameran alkuperäinen säilytetään erikseen, jotta kuvat voi tallentaa
+      // puhelimeen täysikokoisina. Ne vievät paljon tilaa, joten säilytys on
+      // asetuksissa kytkettävissä pois.
+      if (asetukset.sailytaAlkuperaiset) {
+        try {
+          await db.tallennaKamerakuva(`${avain}-kamera`, kohde.id, tiedosto);
+          merkinta.kameraAvain = `${avain}-kamera`;
+        } catch (e) {
+          console.warn('Alkuperäiskuvaa ei voitu säilöä', e);
+        }
+      }
+      o.kuvat.push(merkinta);
     } catch (e) {
       ilmoita(`Kuvan käsittely epäonnistui: ${e.message}`, true);
     }
@@ -836,6 +968,7 @@ async function poistaKuva(osioId, i) {
     const url = kuvaUrlit.get(avain);
     if (url) { URL.revokeObjectURL(url); kuvaUrlit.delete(avain); }
   }
+  if (kuva.kameraAvain) await db.poistaKamerakuva(kuva.kameraAvain);
   o.kuvat.splice(i, 1);
   await tallennaHeti();
   naytaOsio(osioId);
@@ -1084,6 +1217,14 @@ async function naytaAsetukset() {
     h('div', { class: 'kortti' },
       kenttaInput('Tarkastaja(t)', asetukset.tarkastaja,
         (v) => { asetukset.tarkastaja = v; }, 'text', 'Esitäytetään uusiin kohteisiin'),
+      h('label', { style: 'display:flex;align-items:center;gap:10px;font-size:15px;color:inherit;margin-bottom:12px' },
+        h('input', {
+          type: 'checkbox', checked: asetukset.sailytaAlkuperaiset,
+          style: 'width:22px;height:22px;min-height:22px',
+          onchange: (e) => { asetukset.sailytaAlkuperaiset = e.target.checked; tallenna(); },
+        }),
+        'Säilytä kameran alkuperäiskuvat, jotta ne voi tallentaa puhelimeen '
+        + 'täysikokoisina (vie huomattavasti tilaa)'),
       h('button', { style: 'width:100%', onclick: tallenna }, 'Tallenna')),
 
     h('h2', null, 'Tallennustila'),

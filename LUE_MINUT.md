@@ -51,6 +51,24 @@ kertoo milloin kohde on viimeksi viety ja onko sen jälkeen tullut muutoksia.
 > Tuonti hyväksyy myös uudelleenpakatut kansiot (Windowsin *Pakattu kansio*
 > ja `Compress-Archive`), ei pelkästään sovelluksen omia paketteja.
 
+## Kuvat puhelimeen
+
+Kohdenäkymän **Kuvat puhelimeen** -lohkosta voi tallentaa kaikki kohteen kuvat
+puhelimen muistiin yhdellä painalluksella. Kuvat tallentuvat kameran ottamassa
+täydessä tarkkuudessa nimillä kuten `Poikkikuja 3_07-julkisivut-1.jpg`.
+
+> **Kuvat menevät Lataukset-kansioon, eivät kamerarullaan.** Selainsovellus ei
+> pääse kirjoittamaan Androidin galleriakansioon (DCIM) — se on selaimen
+> turvarajoitus. Kuvat näkyvät Galleriassa ja Google Kuvissa omana
+> "Download"-kansionaan. Ensimmäisellä kerralla selain kysyy luvan tallentaa
+> useita tiedostoja; hyväksy se.
+
+Alkuperäiskuvat vievät moninkertaisesti tilaa raporttiin meneviin 1600 px:n
+kuviin verrattuna, joten lohko näyttää niiden koon ja tarjoaa **Vapauta tilaa**
+-painikkeen. Raporttiin menevät kuvat säilyvät aina. Säilytyksen voi kytkeä
+kokonaan pois **Asetuksista**, jolloin puhelimeen tallentuu sama pienennetty
+versio joka menee raporttiin.
+
 ## Liitteet
 
 Kohdenäkymän **Liitteet**-lohkoon voi lisätä energiatodistuksen, piirustukset
