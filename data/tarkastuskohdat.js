@@ -13,6 +13,11 @@ export const TILAT = [
 
 export const KUVIA_PER_OSIO = 4;
 
+// Yksittäiseen tarkastuskohtaan voi liittää lähikuvia havainnosta. Nämä ovat
+// osion neljän raporttikuvan lisäksi ja menevät raporttiin sen osion
+// yhteyteen, jonka tarkastuskohdasta ne on otettu.
+export const KUVIA_PER_KOHTA = 3;
+
 // --- Mittaukset --------------------------------------------------------------
 //
 // Rakenneosakohtaiset kosteusmittaukset. Gannin pallopääanturi on

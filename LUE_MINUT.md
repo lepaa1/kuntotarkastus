@@ -28,6 +28,13 @@ kirjaus → kuvat → Claude API   →  ZIP  →  Kohteet/<kohde>/  →  "Tee ra
    - Enintään 4 kuvaa per osio, kuten raporttipohjassa. **Napauta kuvaa** niin
      voit piirtää siihen nuolen tai ympyröinnin. Alkuperäinen kuva säilyy, joten
      merkinnät voi tehdä uusiksi tai poistaa kumoamalla ne kaikki.
+   - **Kuvat yksittäiseen tarkastuskohtaan**: jokaisen tarkastuskohdan alla on
+     *＋ Kuva*, jolla otat lähikuvan juuri siitä havainnosta. Enintään 3 kuvaa
+     kohtaa kohti, ja ne ovat osion neljän kuvan lisäksi. Näitäkin kuvia voi
+     merkitä napauttamalla.
+   - Yläpalkin **kotipainike** vie takaisin tarkastuksen etusivulle, jossa
+     kaikki osiot näkyvät. Se hyppää suoraan perille riippumatta siitä, kuinka
+     monen osion kautta on kuljettu — nuoli `‹` peruuttaa vain askeleen.
 4. **Luo raporttitekstit** kun verkko on käytettävissä. Claude kirjoittaa
    Yleiskuvaus / Havainnot / Toimenpide-ehdotukset ja kuvatekstit. Tekstejä voi
    muokata osionäkymissä ennen vientiä.
@@ -88,7 +95,7 @@ Paketin sisältö:
 | `muistiinpanot.md` | `Kohteet/_MALLI-kohde/muistiinpanot.md` -rungon mukainen, AI:n täyttämä |
 | `tyomaakirja.md` | rastit, huomautukset ja mittaukset taulukkoina |
 | `tarkastus.json` | koko raakadata (varmuuskopio, tuonti takaisin sovellukseen) |
-| `kuvat/` | `07-julkisivut-1.jpg` jne. — etuliite kertoo raportin osion |
+| `kuvat/` | `07-julkisivut-1.jpg` jne. — etuliite kertoo raportin osion. Tarkastuskohtien lähikuvat ovat muotoa `07-julkisivut-k4-1.jpg`, jossa `k4` on osion neljäs tarkastuskohta |
 | `lisatiedot/` | liitetiedostot alkuperäisillä nimillään |
 
 ### Raporttiin renderöinti
@@ -100,6 +107,11 @@ Kun raporttia tehdään koneella:
   — Gannin pintakosteudenosoitin antaa vain suhteellisen lukeman.
 - **Liitteet** eivät mene raporttiin.
 - Kuvat ovat jo merkittyinä, jos niihin on piirretty nuolia tai ympyröintejä.
+- **Tarkastuskohtien lähikuvat** (`…-k4-1.jpg`) menevät sen osion kuvasivulle,
+  jonka tarkastuskohdasta ne on otettu. `muistiinpanot.md` listaa ne omana
+  *Tarkastuskohtien kuvat* -lohkonaan ja kertoo kunkin kuvan kohdalla
+  tarkastuskohdan tekstin, tilan ja huomautuksen — kirjoita kuvateksti sen
+  pohjalta. Näille ei ole erillistä kuvatekstikenttää sovelluksessa.
 
 Tyhjiksi jääneet osiot eivät ole mukana; ne on listattu `muistiinpanot.md`:n
 lopussa, jotta näet mitä jätettiin pois.

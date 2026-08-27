@@ -50,11 +50,18 @@ body {
 
 #otsikko {
   flex: 1;
+  min-width: 0;
   margin: 0;
-  padding: 12px 0;
-  font-size: 17px;
+  padding: 8px 0;
+  font-size: 16px;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1.2;
+  /* Kotinapin jalkeen otsikolle jaa kapea tila. Pitkat osioiden nimet
+     (esim. "12. Vesikate, raystaat ja varusteet") saavat siksi kayttaa kaksi
+     rivia sen sijaan, etta ne katkaistaisiin kolmella pisteella. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -70,6 +77,16 @@ body {
   cursor: pointer;
 }
 .ikonipainike[hidden] { display: none; }
+
+/* Kotinapin kuvake piirretaan SVG:na, jotta se nakyy samanlaisena kaikilla
+   Androidin fonteilla toisin kuin unicode-talomerkki. */
+.ikonipainike svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  margin: 0 auto;
+  fill: currentColor;
+}
 
 #sisalto {
   flex: 1;
@@ -431,3 +448,53 @@ button.sanelu.kuuntelee {
 }
 .tunnus.ok { background: #dcf3e5; color: var(--ok); }
 .tunnus.ei { background: #fbe3e1; color: var(--ei); }
+
+/* --- Tarkastuskohdan omat kuvat --------------------------------------------
+   Lahikuvat yhdesta havainnosta. Rivi on tarkoituksella matala, jotta se ei
+   vie tilaa niissa kymmenissa kohdissa, joihin kuvia ei oteta. */
+
+.kohtakuvat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pikkukuva {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--reuna);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.pikkukuva img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pikkukuva .poista {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 0 8px 0 8px;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  border: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.kohtakuva-lisaa {
+  min-height: 34px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--himmea);
+  background: #fff;
+  border-style: dashed;
+  align-self: center;
+}

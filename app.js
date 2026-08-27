@@ -8,13 +8,14 @@ import { skaalaa, muotoileKoko } from './lib/kuva.js';
 import { liitaSanelu, saneluTuettu } from './lib/sanelu.js';
 import { avaaMerkinta } from './lib/merkinta.js';
 import {
-  TILAT, LOMAKEOSIOT, OSIOT, MITTALAITTEET, MITTAYKSIKOT,
+  TILAT, LOMAKEOSIOT, OSIOT, MITTALAITTEET, MITTAYKSIKOT, KUVIA_PER_KOHTA,
   osioMaaritys, osioNimi, osioJarjestys, yksikonNimi,
 } from './data/tarkastuskohdat.js';
 
 const YLAPALKKI = document.getElementById('ylapalkki');
 const OTSIKKO = document.getElementById('otsikko');
 const TAKAISIN = document.getElementById('takaisin');
+const KOTI = document.getElementById('koti');
 const VALIKKO = document.getElementById('valikko');
 const SISALTO = document.getElementById('sisalto');
 const ALAPALKKI = document.getElementById('alapalkki');
@@ -124,9 +125,21 @@ function tallennaHeti() {
 
 function osioTila(osioId) {
   if (!kohde.osiot[osioId]) {
-    kohde.osiot[osioId] = { tilat: {}, huomautukset: {}, muuta: '', kuvat: [], poissa: false };
+    kohde.osiot[osioId] = {
+      tilat: {}, huomautukset: {}, muuta: '', kuvat: [], kohtakuvat: {}, poissa: false,
+    };
   }
+  // Vanhemmilla kohteilla ei ole kohtakuvia; lisätään puuttuva kenttä lennossa.
+  if (!kohde.osiot[osioId].kohtakuvat) kohde.osiot[osioId].kohtakuvat = {};
   return kohde.osiot[osioId];
+}
+
+/**
+ * Yhden tarkastuskohdan kuvat lukemista varten. Ei luo taulukkoa: muuten
+ * jokaisesta piirretystä kohdasta jäisi tyhjä taulukko tarkastus.json:iin.
+ */
+function kohdanKuvat(osioId, i) {
+  return osioTila(osioId).kohtakuvat[i] || [];
 }
 
 // --- Navigaatio --------------------------------------------------------------
@@ -146,6 +159,9 @@ async function reititys() {
 
   const osat = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   TAKAISIN.hidden = osat.length === 0;
+  // Kotinappi vie avoinna olevan tarkastuksen etusivulle. Sitä ei näytetä
+  // kohdelistassa, asetuksissa eikä kohdenäkymässä itsessään.
+  KOTI.hidden = !['lomake', 'osio', 'ai'].includes(osat[0]);
 
   try {
     if (osat.length === 0) return await naytaKohdelista();
@@ -179,7 +195,7 @@ async function naytaKohdelista() {
 
   const lista = kohteet.map((k) => {
     const osioita = osioJarjestys(k).filter((id) => vienti.osiollaSisaltoa(k, id)).length;
-    const kuvia = Object.values(k.osiot || {}).reduce((s, o) => s + (o.kuvat || []).length, 0);
+    const kuvia = vienti.kaikkiKuvat(k).length;
     return h('button', { class: 'kortti kohde-rivi', onclick: () => siirry(`/kohde/${k.id}`) },
       h('span', { class: 'nimi' },
         k.nimi || 'Nimetön kohde',
@@ -431,8 +447,7 @@ function lataaTiedosto(blob, nimi) {
 }
 
 async function kuvatPuhelimeenLohko() {
-  const kuvia = osioJarjestys(kohde)
-    .reduce((s, id) => s + (kohde.osiot?.[id]?.kuvat || []).length, 0);
+  const kuvia = vienti.kaikkiKuvat(kohde).length;
   const tila = await db.kamerakuvienTila(kohde.id);
 
   if (!kuvia) {
@@ -482,20 +497,16 @@ async function tallennaKuvatPuhelimeen() {
   let puuttuvia = 0;
 
   ilmoita('Tallennetaan kuvia…');
-  for (const osioId of osioJarjestys(kohde)) {
-    const kuvat = kohde.osiot?.[osioId]?.kuvat || [];
-    for (let i = 0; i < kuvat.length; i++) {
-      const kuva = kuvat[i];
-      // Ensisijaisesti kameran alkuperäinen, muuten raporttiin menevä versio.
-      const blob = (kuva.kameraAvain && await db.haeKamerakuva(kuva.kameraAvain))
-        || await db.haeKuva(kuva.avain);
-      if (!blob) { puuttuvia++; continue; }
+  for (const { kuva, nimi } of vienti.kaikkiKuvat(kohde)) {
+    // Ensisijaisesti kameran alkuperäinen, muuten raporttiin menevä versio.
+    const blob = (kuva.kameraAvain && await db.haeKamerakuva(kuva.kameraAvain))
+      || await db.haeKuva(kuva.avain);
+    if (!blob) { puuttuvia++; continue; }
 
-      lataaTiedosto(blob, `${kohdeNimi}_${vienti.kuvatiedostonNimi(osioId, i)}`);
-      tallennettu++;
-      // Pieni tauko latausten väliin: selain voi muuten hylätä osan.
-      await new Promise((r) => setTimeout(r, 250));
-    }
+    lataaTiedosto(blob, `${kohdeNimi}_${nimi}`);
+    tallennettu++;
+    // Pieni tauko latausten väliin: selain voi muuten hylätä osan.
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   if (tallennettu) {
@@ -516,9 +527,7 @@ async function vapautaAlkuperaiset(tila) {
   if (!await vahvista(varmistus, 'Poista')) return;
 
   await db.poistaKohteenKamerakuvat(kohde.id);
-  for (const osioId of osioJarjestys(kohde)) {
-    for (const kuva of kohde.osiot?.[osioId]?.kuvat || []) delete kuva.kameraAvain;
-  }
+  for (const { kuva } of vienti.kaikkiKuvat(kohde)) delete kuva.kameraAvain;
   await tallennaHeti();
   ilmoita(`${muotoileKoko(tila.tavuja)} vapautettu.`);
   naytaKohde();
@@ -585,8 +594,13 @@ async function monistaOsio(perusId) {
 
 async function poistaKloonattuOsio(osioId) {
   if (!await vahvista(`Poistetaanko osio "${osioNimi(osioId)}" kuvineen?`)) return;
-  for (const kuva of kohde.osiot[osioId]?.kuvat || []) {
-    await db.poistaKuva(kuva.avain);
+  const o = kohde.osiot[osioId] || {};
+  const poistettavat = [...(o.kuvat || []), ...Object.values(o.kohtakuvat || {}).flat()];
+  for (const kuva of poistettavat) {
+    for (const avain of [kuva.avain, kuva.alkuperaAvain].filter(Boolean)) {
+      await db.poistaKuva(avain);
+    }
+    if (kuva.kameraAvain) await db.poistaKamerakuva(kuva.kameraAvain);
   }
   delete kohde.osiot[osioId];
   await tallennaHeti();
@@ -783,10 +797,145 @@ function piirraKohta(osioId, teksti, i) {
   }, t.lyhyt));
 
   piirraHuomautus();
+  const kuvaPaikka = h('div', { class: 'kohtakuvat' });
+  piirraKohtaKuvat(osioId, i, kuvaPaikka);
+
   return h('div', { class: 'kohta' },
     h('div', { class: 'teksti' }, teksti),
     h('div', { class: 'tilat' }, napit),
-    huomautusPaikka);
+    huomautusPaikka,
+    kuvaPaikka);
+}
+
+// --- Tarkastuskohdan omat kuvat ---------------------------------------------
+//
+// Osion neljä raporttikuvaa kuvaavat kokonaisuutta; nämä ovat lähikuvia
+// yksittäisestä havainnosta. Rivi piirretään erikseen, jotta kuvan lisäys ei
+// piirrä koko osionäkymää uudelleen eikä vieritys hyppää.
+
+async function piirraKohtaKuvat(osioId, i, paikka) {
+  const kuvat = kohdanKuvat(osioId, i);
+  const osat = [];
+
+  for (let j = 0; j < kuvat.length; j++) {
+    const kuva = kuvat[j];
+    let url = kuvaUrlit.get(kuva.avain);
+    if (!url) {
+      const blob = await db.haeKuva(kuva.avain);
+      if (blob) { url = URL.createObjectURL(blob); kuvaUrlit.set(kuva.avain, url); }
+    }
+    osat.push(h('div', { class: 'pikkukuva' },
+      url
+        ? h('img', {
+          src: url, alt: `Kuva ${j + 1}`, title: 'Napauta merkitäksesi',
+          onclick: () => merkitseKohtaKuva(osioId, i, j, paikka),
+        })
+        : h('span', { class: 'himmea' }, '?'),
+      h('button', {
+        class: 'poista', 'aria-label': 'Poista kuva',
+        onclick: () => poistaKohtaKuva(osioId, i, j, paikka),
+      }, '×')));
+  }
+
+  if (kuvat.length < KUVIA_PER_KOHTA) {
+    const valitsin = h('input', {
+      type: 'file', accept: 'image/*', capture: 'environment', multiple: true,
+      style: 'display:none',
+      onchange: (e) => lisaaKohtaKuvia(osioId, i, e.target.files, paikka),
+    });
+    osat.push(h('button', {
+      class: 'kohtakuva-lisaa', onclick: () => valitsin.click(),
+      'aria-label': 'Lisää kuva tähän tarkastuskohtaan',
+    }, '＋ Kuva'), valitsin);
+  }
+
+  paikka.replaceChildren(...osat);
+}
+
+async function lisaaKohtaKuvia(osioId, i, tiedostot, paikka) {
+  const o = osioTila(osioId);
+  if (!o.kohtakuvat[i]) o.kohtakuvat[i] = [];
+  const kuvat = o.kohtakuvat[i];
+  const lisattavat = Array.from(tiedostot).slice(0, KUVIA_PER_KOHTA - kuvat.length);
+  if (!lisattavat.length) {
+    ilmoita(`Tarkastuskohtaan mahtuu ${KUVIA_PER_KOHTA} kuvaa.`);
+    return;
+  }
+
+  ilmoita(`Käsitellään ${lisattavat.length} kuvaa…`);
+  for (const tiedosto of lisattavat) {
+    try {
+      const pieni = await skaalaa(tiedosto);
+      const avain = `${kohde.id}/${osioId}/k${i}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      await db.tallennaKuva(avain, kohde.id, pieni);
+      const merkinta = { avain };
+      if (asetukset.sailytaAlkuperaiset) {
+        try {
+          await db.tallennaKamerakuva(`${avain}-kamera`, kohde.id, tiedosto);
+          merkinta.kameraAvain = `${avain}-kamera`;
+        } catch (e) {
+          console.warn('Alkuperäiskuvaa ei voitu säilöä', e);
+        }
+      }
+      kuvat.push(merkinta);
+    } catch (e) {
+      ilmoita(`Kuvan käsittely epäonnistui: ${e.message}`, true);
+    }
+  }
+  await tallennaHeti();
+  await piirraKohtaKuvat(osioId, i, paikka);
+}
+
+async function poistaKohtaKuva(osioId, i, j, paikka) {
+  const o = osioTila(osioId);
+  const kuvat = o.kohtakuvat[i] || [];
+  const kuva = kuvat[j];
+  if (!kuva) return;
+  if (!await vahvista('Poistetaanko kuva?')) return;
+  for (const avain of [kuva.avain, kuva.alkuperaAvain].filter(Boolean)) {
+    await db.poistaKuva(avain);
+    const url = kuvaUrlit.get(avain);
+    if (url) { URL.revokeObjectURL(url); kuvaUrlit.delete(avain); }
+  }
+  if (kuva.kameraAvain) await db.poistaKamerakuva(kuva.kameraAvain);
+  kuvat.splice(j, 1);
+  if (!kuvat.length) delete o.kohtakuvat[i];
+  await tallennaHeti();
+  await piirraKohtaKuvat(osioId, i, paikka);
+}
+
+async function merkitseKohtaKuva(osioId, i, j, paikka) {
+  const kuva = (osioTila(osioId).kohtakuvat[i] || [])[j];
+  if (!kuva) return;
+  // Merkinnät piirretään aina alkuperäiseen, jotta ne voi tehdä uusiksi.
+  const pohjaAvain = kuva.alkuperaAvain || kuva.avain;
+  const pohja = await db.haeKuva(pohjaAvain);
+  if (!pohja) { ilmoita('Kuvaa ei löytynyt', true); return; }
+
+  const tulos = await avaaMerkinta(pohja, kuva.merkinnat || []);
+  if (!tulos) return;
+
+  if (!tulos.merkinnat.length) {
+    if (kuva.alkuperaAvain) {
+      await db.poistaKuva(kuva.avain);
+      const url = kuvaUrlit.get(kuva.avain);
+      if (url) { URL.revokeObjectURL(url); kuvaUrlit.delete(kuva.avain); }
+      kuva.avain = kuva.alkuperaAvain;
+      delete kuva.alkuperaAvain;
+    }
+    delete kuva.merkinnat;
+  } else {
+    if (!kuva.alkuperaAvain) {
+      kuva.alkuperaAvain = kuva.avain;
+      kuva.avain = `${kuva.alkuperaAvain}-m`;
+    }
+    await db.tallennaKuva(kuva.avain, kohde.id, tulos.blob);
+    const url = kuvaUrlit.get(kuva.avain);
+    if (url) { URL.revokeObjectURL(url); kuvaUrlit.delete(kuva.avain); }
+    kuva.merkinnat = tulos.merkinnat;
+  }
+  await tallennaHeti();
+  await piirraKohtaKuvat(osioId, i, paikka);
 }
 
 // --- Mittaukset --------------------------------------------------------------
@@ -1266,6 +1415,9 @@ async function naytaAsetukset() {
 // --- Käynnistys --------------------------------------------------------------
 
 TAKAISIN.addEventListener('click', () => history.back());
+// Kotinappi hyppää suoraan kohteen etusivulle riippumatta siitä, kuinka monen
+// osion kautta on kuljettu. history.back() ei tähän kelpaa.
+KOTI.addEventListener('click', () => { if (kohde) siirry(`/kohde/${kohde.id}`); });
 VALIKKO.addEventListener('click', () => siirry('/asetukset'));
 window.addEventListener('hashchange', reititys);
 // Kirjoitetaan vain jos jotain on oikeasti jäänyt tallentamatta — muuten
