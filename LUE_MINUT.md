@@ -159,6 +159,16 @@ Kasvata `sovellus/sw.js`:n `VALIMUISTI`-versiota (`kuntotarkastus-v1` →
 vanhaa versiota. Sovellus lataa itsensä automaattisesti uudelleen, kun uusi
 service worker ottaa ohjauksen.
 
+**Asetukset → Sovellusversio** kertoo, mikä versio puhelimessa on käytössä, ja
+*Tarkista päivitykset* hakee uuden heti. Käytä tätä ensimmäisenä, jos muutos ei
+näy puhelimessa — se erottaa julkaisuongelman välimuistiongelmasta.
+
+> **Jos päivitys ei silti tule läpi:** kotinäytöltä avattu sovellus jää usein
+> taustalle, eikä selain silloin tarkista `sw.js`:ää lainkaan. Sulje sovellus
+> kokonaan (pyyhkäise pois viimeisimmistä) ja avaa uudelleen. Sovellus
+> tarkistaa päivityksen nykyään myös aina kun se palaa näkyviin, joten tämän
+> pitäisi riittää.
+
 ## Rakenne
 
 | Tiedosto | Vastuu |

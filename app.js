@@ -28,6 +28,7 @@ let tallennusPysyva = null;     // null = ei tiedossa / ei tuettu
 const kuvaUrlit = new Map();    // avain -> object URL, vapautetaan näkymän vaihtuessa
 let tallennusAjastin = null;
 let tallentamatta = false;      // onko muutoksia, joita ei ole vielä kirjoitettu
+let rekisterointi = null;       // service workerin rekisteröinti, päivitystä varten
 
 // --- DOM-apurit --------------------------------------------------------------
 
@@ -1407,9 +1408,65 @@ async function naytaAsetukset() {
           + 'Selain lähettää äänen Googlen palvelimille tunnistettavaksi — sama '
           + 'koskee puhelimen näppäimistön sanelua.'
         : 'Tämä selain ei tue sanelua.'),
+
+    h('h2', null, 'Sovellusversio'),
+    versioLohko(),
   );
 
   ALAPALKKI.hidden = true;
+}
+
+/**
+ * Näyttää käytössä olevan version ja tarjoaa painikkeen päivityksen
+ * hakemiseen. Puhelin voi jäädä vanhaan välimuistiversioon, eikä sitä muuten
+ * näe mistään — tämä tekee siitä tarkistettavan asian.
+ */
+function versioLohko() {
+  const teksti = h('p', { class: 'himmea' }, 'Selvitetään…');
+  const nappi = h('button', { style: 'width:100%' }, 'Tarkista päivitykset');
+
+  const kysyVersio = () => {
+    const ohjain = navigator.serviceWorker?.controller;
+    if (!ohjain) {
+      teksti.textContent = 'Offline-tuki ei ole käytössä tässä selaimessa. '
+        + 'Sovellus toimii, mutta vaatii verkkoyhteyden.';
+      return;
+    }
+    const kanava = new MessageChannel();
+    kanava.port1.onmessage = (e) => {
+      teksti.textContent = `Käytössä: ${e.data?.versio || 'tuntematon'}`;
+    };
+    ohjain.postMessage({ tyyppi: 'versio' }, [kanava.port2]);
+    // Vanha service worker ei osaa vastata versiokyselyyn — silloin
+    // puhelimessa on varmuudella vanha versio.
+    setTimeout(() => {
+      if (teksti.textContent === 'Selvitetään…') {
+        teksti.textContent = 'Käytössä on vanha versio, joka ei tunne '
+          + 'versiokyselyä. Hae päivitys alta.';
+      }
+    }, 1200);
+  };
+
+  nappi.addEventListener('click', async () => {
+    if (!rekisterointi) { ilmoita('Offline-tuki ei ole käytössä.'); return; }
+    nappi.disabled = true;
+    nappi.textContent = 'Tarkistetaan…';
+    try {
+      await rekisterointi.update();
+      // Jos uusi versio löytyi, se ottaa ohjauksen ja sovellus latautuu
+      // uudelleen itsestään. Muuten kerrotaan, että versio on jo uusin.
+      await new Promise((r) => setTimeout(r, 2500));
+      ilmoita('Sovellus on ajan tasalla.');
+    } catch (e) {
+      ilmoita(`Päivitystä ei voitu hakea: ${e.message}`, true);
+    } finally {
+      nappi.disabled = false;
+      nappi.textContent = 'Tarkista päivitykset';
+    }
+  });
+
+  kysyVersio();
+  return h('div', { class: 'kortti' }, teksti, nappi);
 }
 
 // --- Käynnistys --------------------------------------------------------------
@@ -1454,7 +1511,20 @@ function naytaKaynnistysvirhe(viesti) {
       paivitetty = true;
       location.reload();
     });
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline-tuki valinnainen */ });
+    // updateViaCache: 'none' — selaimen HTTP-välimuisti ei saa tarjoilla
+    // vanhaa sw.js:ää, muuten päivitys voi jäädä huomaamatta.
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        rekisterointi = reg;
+        reg.update().catch(() => {});
+        // Kotinäytöltä avattu sovellus jää usein taustalle eikä tee uutta
+        // navigaatiota, jolloin selain ei tarkista sw.js:ää lainkaan.
+        // Tarkistetaan aina kun sovellus palaa näkyviin.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        });
+      })
+      .catch(() => { /* offline-tuki valinnainen */ });
   }
 
   db.kunVersioVaihtuu(() => {

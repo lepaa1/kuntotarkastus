@@ -7,7 +7,7 @@
 // TÄRKEÄÄ: kasvata versionumeroa aina kun julkaiset muutoksia. Selain asentaa
 // service workerin uudelleen vain jos tämä tiedosto muuttuu — muuten puhelin
 // voi jäädä käyttämään vanhaa versiota.
-const VALIMUISTI = 'kuntotarkastus-v8';
+const VALIMUISTI = 'kuntotarkastus-v9';
 
 const TIEDOSTOT = [
   './',
@@ -44,6 +44,15 @@ self.addEventListener('activate', (e) => {
         avaimet.filter((a) => a !== VALIMUISTI).map((a) => caches.delete(a))))
       .then(() => self.clients.claim()),
   );
+});
+
+// Sovellus kysyy käytössä olevan version, jotta Asetuksista näkee onko
+// puhelimessa uusin julkaisu vai vanha välimuistiversio.
+self.addEventListener('message', (e) => {
+  if (e.data?.tyyppi !== 'versio') return;
+  const vastaus = { tyyppi: 'versio', versio: VALIMUISTI };
+  if (e.ports?.[0]) e.ports[0].postMessage(vastaus);
+  else e.source?.postMessage(vastaus);
 });
 
 self.addEventListener('fetch', (e) => {
